@@ -1,11 +1,10 @@
-use jni::{
-    errors::Error,
-    objects::{JObject, JString},
-    JNIEnv,
-};
+use std::borrow::Borrow;
+use jni::{errors::Error, objects::{JObject, JString}, JNIEnv, AttachGuard};
+use jni::objects::{JValue, JValueOwned};
+use jni::sys::jint;
 
 struct Inner<'env> {
-    env: JNIEnv<'env>,
+    env: AttachGuard<'env>,
     object: JObject<'env>,
 }
 
@@ -16,7 +15,7 @@ pub struct Intent<'env> {
 }
 
 impl<'env> Intent<'env> {
-    pub fn from_object(env: JNIEnv<'env>, object: JObject<'env>) -> Self {
+    pub fn from_object(env: AttachGuard<'env>, object: JObject<'env>) -> Self {
         Self {
             inner: Ok(Inner { env, object }),
         }
@@ -27,14 +26,20 @@ impl<'env> Intent<'env> {
         Self { inner }
     }
 
-    pub fn new(env: JNIEnv<'env>, action: impl AsRef<str>) -> Self {
-        Self::from_fn(|| {
-            let intent_class = env.find_class("android/content/Intent")?;
-            let action_view =
-                env.get_static_field(intent_class, action.as_ref(), "Ljava/lang/String;")?;
+    fn get_static_field_val<'a>(env: &mut AttachGuard<'a>, field_name: impl AsRef<str>, field_type: &str) -> Result<JValueOwned<'a>, Error> {
+        let intent_class = env.find_class("android/content/Intent")?;
+        let val = env.get_static_field(&intent_class, field_name.as_ref(), field_type)?;
 
+        return Ok(val);
+    }
+
+    pub fn new(mut env: AttachGuard<'env>, action: impl AsRef<str>) -> Self {
+        Self::from_fn(|| {
+            let action_view = Self::get_static_field_val(&mut env, action.as_ref(), "Ljava/lang/String;")?;
+
+            let intent_class = env.find_class("android/content/Intent")?;
             let intent =
-                env.new_object(intent_class, "(Ljava/lang/String;)V", &[action_view.into()])?;
+                env.new_object(&intent_class, "(Ljava/lang/String;)V", &[(&action_view).into()])?;
 
             Ok(Inner {
                 env,
@@ -43,7 +48,7 @@ impl<'env> Intent<'env> {
         })
     }
 
-    pub fn new_with_uri(env: JNIEnv<'env>, action: impl AsRef<str>, uri: impl AsRef<str>) -> Self {
+    pub fn new_with_uri(mut env: AttachGuard<'env>, action: impl AsRef<str>, uri: impl AsRef<str>) -> Self {
         Self::from_fn(|| {
             let url_string = env.new_string(uri)?;
             let uri_class = env.find_class("android/net/Uri")?;
@@ -51,17 +56,16 @@ impl<'env> Intent<'env> {
                 uri_class,
                 "parse",
                 "(Ljava/lang/String;)Landroid/net/Uri;",
-                &[JString::from(url_string).into()],
+                &[(&url_string).into()],
             )?;
 
-            let intent_class = env.find_class("android/content/Intent")?;
-            let action_view =
-                env.get_static_field(intent_class, action.as_ref(), "Ljava/lang/String;")?;
+            let action_view = Self::get_static_field_val(&mut env, action.as_ref(), "Ljava/lang/String;")?;
 
+            let intent_class = env.find_class("android/content/Intent")?;
             let intent = env.new_object(
-                intent_class,
+                &intent_class,
                 "(Ljava/lang/String;Landroid/net/Uri;)V",
-                &[action_view.into(), uri.into()],
+                &[(&action_view).into(), (&uri).into()],
             )?;
 
             Ok(Inner {
@@ -82,19 +86,23 @@ impl<'env> Intent<'env> {
     /// ```
     pub fn with_extra(self, key: impl AsRef<str>, value: impl AsRef<str>) -> Self {
         self.and_then(|inner| {
+            let mut inner = inner;
+
             let key = inner.env.new_string(key)?;
             let value = inner.env.new_string(value)?;
 
             inner.env.call_method(
-                inner.object,
+                &inner.object,
                 "putExtra",
                 "(Ljava/lang/String;Ljava/lang/String;)Landroid/content/Intent;",
-                &[key.into(), value.into()],
+                &[(&key).into(), (&value).into()],
             )?;
 
             Ok(inner)
         })
     }
+
+
 
     /// Builds a new [`Action::Chooser`] Intent that wraps the given target intent.
     /// ```no_run
@@ -109,20 +117,21 @@ impl<'env> Intent<'env> {
     }
 
     pub fn into_chooser_with_title(self, title: Option<impl AsRef<str>>) -> Self {
-        self.and_then(|mut inner| {
-            let title_value = if let Some(title) = title {
+        self.and_then(|inner| {
+            let title_value: JValueOwned = if let Some(title) = title {
                 let s = inner.env.new_string(title)?;
                 s.into()
             } else {
                 JObject::null().into()
             };
+            let mut inner = inner;
 
             let intent_class = inner.env.find_class("android/content/Intent")?;
             let intent = inner.env.call_static_method(
-                intent_class,
+                &intent_class,
                 "createChooser",
                 "(Landroid/content/Intent;Ljava/lang/CharSequence;)Landroid/content/Intent;",
-                &[inner.object.into(), title_value],
+                &[(&inner.object).into(), (&title_value).into()],
             )?;
 
             inner.object = intent.try_into()?;
@@ -141,13 +150,48 @@ impl<'env> Intent<'env> {
     /// ```
     pub fn with_type(self, type_name: impl AsRef<str>) -> Self {
         self.and_then(|inner| {
+            let mut inner = inner;
             let jstring = inner.env.new_string(type_name)?;
 
             inner.env.call_method(
-                inner.object,
+                &inner.object,
                 "setType",
                 "(Ljava/lang/String;)Landroid/content/Intent;",
-                &[jstring.into()],
+                &[(&jstring).into()],
+            )?;
+
+            Ok(inner)
+        })
+    }
+
+    pub fn add_flags(self, flags: i32) -> Self {
+        self.and_then(|inner| {
+            let mut inner = inner;
+
+            let jflags: jint = flags;
+
+            inner.env.call_method(
+                &inner.object,
+                "addFlags",
+                "(Ljava/lang/String;)Landroid/content/Intent;",
+                &[jflags.into()],
+            )?;
+
+            Ok(inner)
+        })
+    }
+
+    pub fn add_category(self, category: impl AsRef<str>) -> Self {
+        self.and_then(|inner| {
+            let mut inner = inner;
+
+            let jcategory = Self::get_static_field_val(&mut inner.env, category.as_ref(), "Ljava/lang/String;")?;
+
+            inner.env.call_method(
+                &inner.object,
+                "addCategory",
+                "(Ljava/lang/String;)Landroid/content/Intent;",
+                &[(&jcategory).into()],
             )?;
 
             Ok(inner)
@@ -159,11 +203,13 @@ impl<'env> Intent<'env> {
         let activity = unsafe { JObject::from_raw(cx.context() as jni::sys::jobject) };
 
         self.inner.and_then(|inner| {
+            let mut inner = inner;
+
             inner.env.call_method(
                 activity,
                 "startActivity",
                 "(Landroid/content/Intent;)V",
-                &[inner.object.into()],
+                &[(&inner.object).into()],
             )?;
 
             Ok(())
@@ -171,7 +217,10 @@ impl<'env> Intent<'env> {
     }
 
     fn and_then(mut self, f: impl FnOnce(Inner) -> Result<Inner, Error>) -> Self {
-        self.inner = self.inner.and_then(f);
+        self.inner = match self.inner {
+            Ok(inner) => f(inner),
+            Err(err) => Err(err),
+        };
         self
     }
 }
