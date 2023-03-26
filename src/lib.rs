@@ -5,8 +5,11 @@ mod extra;
 pub use extra::Extra;
 
 mod intent;
+
 mod flag;
+
 mod category;
+pub use category::Category;
 
 pub use intent::Intent;
 use jni::{JNIEnv, JavaVM, AttachGuard};
