@@ -4,6 +4,8 @@ use jni::objects::{JValue, JValueOwned};
 use jni::sys::jint;
 use crate::Flags;
 
+use log::debug;
+
 struct Inner<'env> {
     env: AttachGuard<'env>,
     object: JObject<'env>,
@@ -28,6 +30,8 @@ impl<'env> Intent<'env> {
     }
 
     fn get_static_field_val<'a>(env: &mut AttachGuard<'a>, field_name: impl AsRef<str>, field_type: &str) -> Result<JValueOwned<'a>, Error> {
+        debug!("get static field Intent.{} with type {}", field_name.as_ref(), field_type);
+
         let intent_class = env.find_class("android/content/Intent")?;
         let val = env.get_static_field(&intent_class, field_name.as_ref(), field_type)?;
 
@@ -180,7 +184,7 @@ impl<'env> Intent<'env> {
             inner.env.call_method(
                 &inner.object,
                 "addFlags",
-                "(Ljava/lang/String;)Landroid/content/Intent;",
+                "(I)Landroid/content/Intent;",
                 &[jflags.into()],
             )?;
 
