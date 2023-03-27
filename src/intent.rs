@@ -172,7 +172,7 @@ impl<'env> Intent<'env> {
             let mut jflags: jint = 0;
 
             for (flag, _) in flags.iter_names() {
-                let flag_val = Self::get_static_field_val(&mut inner.env, &format!("FLAG_{}", flag), "Ljava/lang/Integer;")?;
+                let flag_val = Self::get_static_field_val(&mut inner.env, &format!("FLAG_{}", flag), "I")?;
                 let jflag_val: jint = flag_val.i().unwrap();
                 jflags |= jflag_val;
             }
