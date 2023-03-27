@@ -2,6 +2,7 @@ use std::borrow::Borrow;
 use jni::{errors::Error, objects::{JObject, JString}, JNIEnv, AttachGuard};
 use jni::objects::{JValue, JValueOwned};
 use jni::sys::jint;
+use crate::Flags;
 
 struct Inner<'env> {
     env: AttachGuard<'env>,
@@ -164,11 +165,17 @@ impl<'env> Intent<'env> {
         })
     }
 
-    pub fn add_flags(self, flags: i32) -> Self {
+    pub fn add_flags(self, flags: Flags) -> Self {
         self.and_then(|inner| {
             let mut inner = inner;
 
-            let jflags: jint = flags;
+            let mut jflags: jint = 0;
+
+            for (flag, _) in flags.iter_names() {
+                let flag_val = Self::get_static_field_val(&mut inner.env, flag, "Ljava/lang/Integer;")?;
+                let jflag_val: jint = flag_val.i().unwrap();
+                jflags |= jflag_val;
+            }
 
             inner.env.call_method(
                 &inner.object,

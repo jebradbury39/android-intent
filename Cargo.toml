@@ -9,3 +9,4 @@ description = "Android intent utilities"
 [dependencies]
 jni = "0.21.1"
 ndk-context = "0.1.1"
+bitflags = "2.0.2"

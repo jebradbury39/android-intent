@@ -7,6 +7,7 @@ pub use extra::Extra;
 mod intent;
 
 mod flag;
+pub use flag::Flags;
 
 mod category;
 pub use category::Category;
