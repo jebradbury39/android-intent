@@ -210,6 +210,8 @@ impl<'env> Intent<'env> {
     }
 
     pub fn start_activity(self) -> Result<(), Error> {
+        debug!("start_activity");
+
         let cx = ndk_context::android_context();
         let activity = unsafe { JObject::from_raw(cx.context() as jni::sys::jobject) };
 
@@ -227,6 +229,60 @@ impl<'env> Intent<'env> {
         })
     }
 
+    pub fn start_activity_for_result(self, request_code: i32) -> Result<(), Error> {
+        debug!("start_activity_for_result: {}", request_code);
+
+        let cx = ndk_context::android_context();
+        let activity = unsafe { JObject::from_raw(cx.context() as jni::sys::jobject) };
+
+        let jcode: jint = request_code.into();
+
+        self.inner.and_then(|inner| {
+            let mut inner = inner;
+
+            inner.env.call_method(
+                activity,
+                "startActivityForResult",
+                "(Landroid/content/Intent;I)V",
+                &[(&inner.object).into(), jcode.into()],
+            )?;
+
+            Ok(())
+        })
+    }
+
+    pub fn get_result(self) -> Result<CompletedIntent<'env>, Error> {
+        debug!("start_activity");
+
+        let cx = ndk_context::android_context();
+        let activity = unsafe { JObject::from_raw(cx.context() as jni::sys::jobject) };
+
+        self.inner.and_then(|inner| {
+            let mut inner = inner;
+
+            let jobj = inner.env.call_method(
+                activity,
+                "getNextIntentResult",
+                "(V)Lcom/example/libnumistracker/RustNativeIntentResult;",
+                &[],
+            )?;
+
+            let jobj = jobj.l().unwrap();
+
+            let jreq_code = inner.env.get_field(&jobj, "requestCode", "I")?;
+            let jres_code = inner.env.get_field(&jobj, "resultCode", "I")?;
+            let jdata = inner.env.get_field(&jobj, "data", "Landroid/content/Intent;")?;
+
+            let intent = Intent::from_object(inner.env, jdata.l().unwrap());
+
+            Ok(CompletedIntent {
+                request_code: jreq_code.i().unwrap().into(),
+                result_code: jres_code.i().unwrap().into(),
+                data: intent,
+            })
+        })
+    }
+
     fn and_then(mut self, f: impl FnOnce(Inner) -> Result<Inner, Error>) -> Self {
         self.inner = match self.inner {
             Ok(inner) => f(inner),
@@ -234,4 +290,10 @@ impl<'env> Intent<'env> {
         };
         self
     }
+}
+
+pub struct CompletedIntent<'env> {
+    request_code: i32,
+    result_code: i32,
+    data: Intent<'env>,
 }
