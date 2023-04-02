@@ -32,7 +32,7 @@ impl IntentEnv {
         };
     }
 
-    pub fn get_env(&mut self) -> AttachGuard {
+    pub fn get_env(&self) -> AttachGuard {
         return self.vm.attach_current_thread().unwrap();
     }
 }
