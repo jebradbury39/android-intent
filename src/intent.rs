@@ -251,8 +251,8 @@ impl<'env> Intent<'env> {
         })
     }
 
-    pub fn get_result(self) -> Result<CompletedIntent<'env>, Error> {
-        debug!("start_activity");
+    pub fn get_result(self) -> Result<Option<CompletedIntent<'env>>, Error> {
+        debug!("get_result for intent");
 
         let cx = ndk_context::android_context();
         let activity = unsafe { JObject::from_raw(cx.context() as jni::sys::jobject) };
@@ -273,13 +273,22 @@ impl<'env> Intent<'env> {
             let jres_code = inner.env.get_field(&jobj, "resultCode", "I")?;
             let jdata = inner.env.get_field(&jobj, "data", "Landroid/content/Intent;")?;
 
-            let intent = Intent::from_object(inner.env, jdata.l().unwrap());
+            let jdata_obj = jdata.l().unwrap();
+            if jdata_obj.is_null() {
+                debug!("  got null result");
+                return Ok(None);
+            }
 
-            Ok(CompletedIntent {
-                request_code: jreq_code.i().unwrap().into(),
-                result_code: jres_code.i().unwrap().into(),
+            let intent = Intent::from_object(inner.env, jdata_obj);
+            let request_code: i32 = jreq_code.i().unwrap().into();
+            let result_code: i32 = jres_code.i().unwrap().into();
+
+            debug!("  got non-null result, request_code={}, result_code={}", request_code, result_code);
+            Ok(Some(CompletedIntent {
+                request_code,
+                result_code,
                 data: intent,
-            })
+            }))
         })
     }
 
@@ -293,7 +302,7 @@ impl<'env> Intent<'env> {
 }
 
 pub struct CompletedIntent<'env> {
-    request_code: i32,
-    result_code: i32,
-    data: Intent<'env>,
+    pub request_code: i32,
+    pub result_code: i32,
+    pub data: Intent<'env>,
 }
