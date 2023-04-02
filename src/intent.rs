@@ -1,5 +1,5 @@
 use std::borrow::Borrow;
-use jni::{errors::Error, objects::{JObject, JString}, JNIEnv, AttachGuard};
+use jni::{errors::Error, objects::{JObject, JString}, JNIEnv, AttachGuard, JavaVM};
 use jni::objects::{JValue, JValueOwned};
 use jni::sys::jint;
 use crate::Flags;
@@ -251,45 +251,46 @@ impl<'env> Intent<'env> {
         }))
     }
 
-    pub fn get_result(self) -> Result<Option<CompletedIntent<'env>>, Error> {
+    pub fn get_result(&mut self, env: AttachGuard<'env>) -> Result<Option<CompletedIntent<'env>>, Error> {
         debug!("get_result for intent");
 
         let cx = ndk_context::android_context();
         let activity = unsafe { JObject::from_raw(cx.context() as jni::sys::jobject) };
 
-        self.inner.and_then(|inner| {
-            let mut inner = inner;
+        let inner = match &mut self.inner {
+            Ok(inner) => inner,
+            Err(err) => return Ok(None),
+        };
 
-            let jobj = inner.env.call_method(
-                activity,
-                "getNextIntentResult",
-                "(V)Lcom/example/libnumistracker/RustNativeIntentResult;",
-                &[],
-            )?;
+        let jobj = inner.env.call_method(
+            activity,
+            "getNextIntentResult",
+            "(V)Lcom/example/libnumistracker/RustNativeIntentResult;",
+            &[],
+        )?;
 
-            let jobj = jobj.l().unwrap();
+        let jobj = jobj.l().unwrap();
 
-            let jreq_code = inner.env.get_field(&jobj, "requestCode", "I")?;
-            let jres_code = inner.env.get_field(&jobj, "resultCode", "I")?;
-            let jdata = inner.env.get_field(&jobj, "data", "Landroid/content/Intent;")?;
+        let jreq_code = inner.env.get_field(&jobj, "requestCode", "I")?;
+        let jres_code = inner.env.get_field(&jobj, "resultCode", "I")?;
+        let jdata = inner.env.get_field(&jobj, "data", "Landroid/content/Intent;")?;
 
-            let jdata_obj = jdata.l().unwrap();
-            if jdata_obj.is_null() {
-                debug!("  got null result");
-                return Ok(None);
-            }
+        let jdata_obj = jdata.l().unwrap();
+        if jdata_obj.is_null() {
+            debug!("  got null result");
+            return Ok(None);
+        }
 
-            let intent = Intent::from_object(inner.env, jdata_obj);
-            let request_code: i32 = jreq_code.i().unwrap().into();
-            let result_code: i32 = jres_code.i().unwrap().into();
+        let intent = Intent::from_object(env, jdata_obj);
+        let request_code: i32 = jreq_code.i().unwrap().into();
+        let result_code: i32 = jres_code.i().unwrap().into();
 
-            debug!("  got non-null result, request_code={}, result_code={}", request_code, result_code);
-            Ok(Some(CompletedIntent {
-                request_code,
-                result_code,
-                data: intent,
-            }))
-        })
+        debug!("  got non-null result, request_code={}, result_code={}", request_code, result_code);
+        return Ok(Some(CompletedIntent {
+            request_code,
+            result_code,
+            data: intent,
+        }));
     }
 
     fn and_then(mut self, f: impl FnOnce(Inner) -> Result<Inner, Error>) -> Self {
