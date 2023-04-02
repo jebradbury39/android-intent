@@ -209,13 +209,13 @@ impl<'env> Intent<'env> {
         })
     }
 
-    pub fn start_activity(self) -> Result<(), Error> {
+    pub fn start_activity(self) -> Result<Self, Error> {
         debug!("start_activity");
 
         let cx = ndk_context::android_context();
         let activity = unsafe { JObject::from_raw(cx.context() as jni::sys::jobject) };
 
-        self.inner.and_then(|inner| {
+        Ok(self.and_then(|inner| {
             let mut inner = inner;
 
             inner.env.call_method(
@@ -225,11 +225,11 @@ impl<'env> Intent<'env> {
                 &[(&inner.object).into()],
             )?;
 
-            Ok(())
-        })
+            Ok(inner)
+        }))
     }
 
-    pub fn start_activity_for_result(self, request_code: i32) -> Result<(), Error> {
+    pub fn start_activity_for_result(self, request_code: i32) -> Result<Self, Error> {
         debug!("start_activity_for_result: {}", request_code);
 
         let cx = ndk_context::android_context();
@@ -237,7 +237,7 @@ impl<'env> Intent<'env> {
 
         let jcode: jint = request_code.into();
 
-        self.inner.and_then(|inner| {
+        Ok(self.and_then(|inner| {
             let mut inner = inner;
 
             inner.env.call_method(
@@ -247,8 +247,8 @@ impl<'env> Intent<'env> {
                 &[(&inner.object).into(), jcode.into()],
             )?;
 
-            Ok(())
-        })
+            Ok(inner)
+        }))
     }
 
     pub fn get_result(self) -> Result<Option<CompletedIntent<'env>>, Error> {
