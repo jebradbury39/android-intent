@@ -265,7 +265,7 @@ impl<'env> Intent<'env> {
         let jobj = inner.env.call_method(
             activity,
             "getNextIntentResult",
-            "(V)Ljava/lang/Object;",
+            "()Ljava/lang/Object;",
             &[],
         )?;
 
