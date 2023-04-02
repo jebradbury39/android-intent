@@ -272,16 +272,16 @@ impl<'env> Intent<'env> {
         debug!("  completed get_result call");
 
         let jobj = jobj.l().unwrap();
+        if jobj.is_null() {
+            debug!("  got null result");
+            return Ok(None);
+        }
 
         let jreq_code = inner.env.get_field(&jobj, "requestCode", "I")?;
         let jres_code = inner.env.get_field(&jobj, "resultCode", "I")?;
         let jdata = inner.env.get_field(&jobj, "data", "Landroid/content/Intent;")?;
 
         let jdata_obj = jdata.l().unwrap();
-        if jdata_obj.is_null() {
-            debug!("  got null result");
-            return Ok(None);
-        }
 
         let intent = Intent::from_object(env, jdata_obj);
         let request_code: i32 = jreq_code.i().unwrap().into();
