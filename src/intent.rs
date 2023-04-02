@@ -265,7 +265,7 @@ impl<'env> Intent<'env> {
         let jobj = inner.env.call_method(
             activity,
             "getNextIntentResult",
-            "(V)Lcom/example/libnumistracker/RustNativeIntentResult;",
+            "(V)Ljava/lang/Object;",
             &[],
         )?;
 
